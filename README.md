@@ -1,0 +1,179 @@
+# LUMEN — Earn in the Agent Economy
+
+A working demo for **SPIRAL × Hack-Nation Challenge 02**.
+
+LUMEN is a Lightning-paywalled API that an AI agent can buy from autonomously.
+The buyer agent (`tripplanner-7`) needs a hotel listing verified; the provider
+(`vision-oracle-3`) sells verifications for **240 sat (~$0.16) per call**. The
+whole round-trip — `402 → invoice → pay → replay → 200` — happens in ~200 ms,
+end-to-end, with no accounts, no API keys, no checkout.
+
+```
+buyer  ──POST /v1/listing-verify──►  provider
+       ◄─ 402 + bolt-11 invoice ───
+       ──pay (NWC) → preimage ────►  Lightning Network
+       ──Authorization: L402 …────►  provider
+       ◄─ 200 + verification proof ─
+```
+
+Two endpoints, ~250 lines of code, the L402 protocol from the brief.
+
+---
+
+## What's in here
+
+| path                | what it is                                                    |
+|---------------------|---------------------------------------------------------------|
+| `concept.html`      | Editorial concept page (open in any browser).                 |
+| `provider/`         | Next.js 16 service that sells `listing-verify` over L402.     |
+| `buyer/`            | Node script — the AI agent that auto-pays the paywall.        |
+| `demo.js`           | One-command launcher for both.                                |
+
+---
+
+## Quick start (no wallet, no setup)
+
+Both apps default to **MOCK_MODE=true** — fake invoices, deterministic preimages,
+zero sats moved. Use this to verify everything works before touching a wallet.
+
+```bash
+# from the repo root
+npm run install:all
+npm run demo
+```
+
+You should see the provider start, the buyer run once, six steps print out, and
+the verification proof come back. The provider stays up at <http://localhost:3000>
+afterwards — visit it in a browser to see the dashboard.
+
+---
+
+## Going live on Lightning (real sats, mainnet)
+
+Three things you do, two flags I flip.
+
+### Step 1 · Get an Alby Hub account (you, ~3 min)
+
+1. Go to <https://albyhub.com/> → **Sign up** (Alby Cloud is the cheapest path; ~30 sec).
+2. Once signed in: top up with **5,000 sats** (≈ $3.30) using the built-in
+   "Buy Bitcoin" button. This covers ~20 demo runs.
+
+### Step 2 · Create two NWC connection strings (you, ~2 min)
+
+In Alby Hub: **Apps → Connect a new app**, twice.
+
+| App name         | Permissions               | Paste into                  |
+|------------------|---------------------------|-----------------------------|
+| `lumen-provider` | `make_invoice, lookup_invoice` | `provider/.env.local`  → `NWC_URL=` |
+| `lumen-buyer`    | `pay_invoice`             | `buyer/.env`     → `NWC_URL=` |
+
+Each gives you a string starting with `nostr+walletconnect://…`. Paste it as the
+`NWC_URL` value in the matching env file.
+
+> ⚠️ The provider and buyer can technically share a single Alby wallet, but using
+> two separate apps means you can see actual sats moving in the Hub's transaction
+> log — way better demo.
+
+### Step 3 · Flip the flags (you, 10 sec)
+
+In **both** `provider/.env.local` and `buyer/.env`:
+
+```diff
+- MOCK_MODE=true
++ MOCK_MODE=false
+```
+
+### Step 4 · Run the demo (`npm run demo`)
+
+The provider issues a real bolt-11 invoice. The buyer's NWC client pays it.
+Lightning settles in 200–800 ms. The provider verifies the preimage against the
+on-chain `payment_hash` and serves the result.
+
+If you watch the Alby Hub UI in another tab, you'll see a 240-sat outgoing
+payment from `lumen-buyer` and a 240-sat incoming payment to `lumen-provider`.
+
+---
+
+## How it's wired
+
+### The L402 protocol (in 80 lines)
+
+`provider/src/lib/l402.ts` is the whole paywall:
+
+- **`require402(resource, sats, desc, ttl)`** — mints a macaroon (HMAC-signed
+  capability token), creates a Lightning invoice via the wallet adapter,
+  returns `HTTP 402` with `WWW-Authenticate: L402 macaroon="…", invoice="…"`.
+- **`verifyAuth(authHeader, resource)`** — accepts the replay header
+  `Authorization: L402 <macaroon>:<preimage>`, checks the HMAC, checks
+  `SHA256(preimage) === payment_hash`, and (in real mode) confirms the invoice
+  actually settled with the wallet.
+
+That's it. Real L402 macaroons can carry richer caveats (scopes, expiry, rate
+limits) — the spirit is identical here.
+
+### The wallet adapter
+
+`provider/src/lib/wallet.ts` exposes a 2-method interface (`makeInvoice`,
+`lookupInvoice`) with two implementations:
+
+- **mock** — generates deterministic preimage + hash pairs in-process.
+- **real** — calls `@getalby/sdk` `NWCClient` over Nostr Wallet Connect.
+
+Same interface either way, so the rest of the code never branches on mode.
+
+### The buyer
+
+`buyer/agent.js` is one self-contained Node script. It:
+
+1. POSTs the task without auth → expects 402.
+2. Parses the `WWW-Authenticate` header.
+3. Runs a spending policy check (`MAX_PRICE_SATS`).
+4. Pays — either via `LNClient.pay(invoice)` (real) or `/api/dev/pay` (mock).
+5. Replays with the L402 auth header, receives the proof.
+6. Prints a colored, time-stamped 6-step receipt.
+
+---
+
+## Endpoints
+
+| method | path                       | purpose                                |
+|--------|----------------------------|----------------------------------------|
+| GET    | `/api/health`              | Service info + current wallet mode.    |
+| POST   | `/api/v1/listing-verify`   | The paid endpoint (402 → 200).         |
+| POST   | `/api/dev/pay`             | **MOCK ONLY** — hands back a preimage. |
+
+All requests / responses are JSON.
+
+---
+
+## Mapping to the brief
+
+| Brief tool        | What it does in LUMEN                                        |
+|-------------------|--------------------------------------------------------------|
+| **L402**          | The paywall handshake. Implemented in `provider/src/lib/l402.ts`. |
+| **MoneyDevKit**   | Skipped — MDK is checkout-component focused, not L402-server. We do L402 directly. |
+| **Alby**          | Both wallets. Single `@getalby/sdk` dependency on each side. |
+| **Lexe**          | Drop-in replacement for the Alby provider wallet (set `NWC_URL` to a Lexe NWC string instead). |
+| **Spark**         | Reserved for the v2 escrow layer — not in M1–M3 scope.       |
+
+## Mapping to the rubric
+
+- **Novel & valuable** — agents can't buy listing-verify-with-photo-proof from any existing API. This sells it for $0.0016 a call.
+- **Money moves** — verifiable on Alby Hub's transaction log; preimage included in the response header.
+- **Trust & safety** — macaroons are HMAC-signed and resource-scoped; preimage proves payment cryptographically; buyer enforces a per-call cap.
+- **Scale** — provider is stateless behind the Lightning rail; routes are async; Next.js handles concurrency.
+- **Lightning-native** — couldn't work on cards (240 sat ≪ 30¢ minimum). Couldn't work on stablecoins (no preimage handshake; would need accounts).
+- **End-to-end demo** — `npm run demo` shows the full flow in ~200 ms.
+
+---
+
+## Troubleshooting
+
+- **`L402_SECRET must be set and ≥32 chars`** — open `provider/.env.local`, the dev value is already long enough.
+- **`NWC_URL not set`** — you flipped `MOCK_MODE=false` without pasting NWC strings into both env files.
+- **Real-mode payment hangs** — Alby Hub needs an inbound channel to receive. The first incoming payment auto-opens one, which can take ~10s on first run.
+- **Port 3000 in use** — set `PORT=3001 npm run provider` and `PROVIDER_URL=http://localhost:3001` in `buyer/.env`.
+
+---
+
+Powered by ⚡ Lightning. Built for [SPIRAL × Hack-Nation Challenge 02](https://spiral.xyz).

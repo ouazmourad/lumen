@@ -1,0 +1,18 @@
+# envs / secrets
+.env
+.env.local
+.env.*.local
+
+# node
+node_modules/
+*.log
+npm-debug.log*
+
+# next
+provider/.next/
+provider/out/
+provider/build/
+
+# os
+.DS_Store
+Thumbs.db

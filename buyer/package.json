@@ -1,0 +1,14 @@
+{
+  "name": "lumen-buyer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node agent.js",
+    "demo": "node agent.js"
+  },
+  "dependencies": {
+    "@getalby/sdk": "^7.0.0",
+    "dotenv": "^17.4.2"
+  }
+}

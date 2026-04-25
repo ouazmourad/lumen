@@ -1,0 +1,14 @@
+{
+  "name": "lumen",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "LUMEN — agents pay agents over Lightning. SPIRAL × Hack-Nation Challenge 02.",
+  "scripts": {
+    "install:all": "npm install --prefix provider && npm install --prefix buyer",
+    "provider": "npm run dev --prefix provider",
+    "buyer": "npm start --prefix buyer",
+    "demo": "node demo.js",
+    "preflight": "node scripts/preflight.js"
+  }
+}
