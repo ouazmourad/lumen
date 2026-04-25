@@ -8,7 +8,9 @@
     "install:all": "npm install --prefix provider && npm install --prefix buyer",
     "provider": "npm run dev --prefix provider",
     "buyer": "npm start --prefix buyer",
+    "buyer:multi": "npm run demo:multi --prefix buyer",
     "demo": "node demo.js",
+    "demo:multi": "node demo.js multi",
     "preflight": "node scripts/preflight.js"
   }
 }

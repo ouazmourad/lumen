@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "start": "node agent.js",
-    "demo": "node agent.js"
+    "demo": "node agent.js",
+    "demo:multi": "node agent-multi.js"
   },
   "dependencies": {
     "@getalby/sdk": "^7.0.0",

@@ -38,10 +38,11 @@ if (!ready) {
 }
 
 await wait(500); // route compile breathing room
-log("demo", "running buyer …", "87");
+const flow = process.argv[2] === "multi" ? "demo:multi" : "demo";
+log("demo", `running buyer (${flow}) …`, "87");
 
 // ─── run buyer once ──────────────────────────────────────────────────
-const buyer = spawn("npm", ["start", "--prefix", "buyer"], { shell: true, stdio: "inherit" });
+const buyer = spawn("npm", ["run", flow, "--prefix", "buyer"], { shell: true, stdio: "inherit" });
 buyer.on("exit", (code) => {
   log("demo", `buyer exited with code ${code}.`, code === 0 ? "120" : "203");
   log("demo", "provider still running on http://localhost:3000  (Ctrl+C to stop)", "214");

@@ -2,11 +2,19 @@
 
 A working demo for **SPIRAL × Hack-Nation Challenge 02**.
 
-LUMEN is a Lightning-paywalled API that an AI agent can buy from autonomously.
-The buyer agent (`tripplanner-7`) needs a hotel listing verified; the provider
-(`vision-oracle-3`) sells verifications for **240 sat (~$0.16) per call**. The
-whole round-trip — `402 → invoice → pay → replay → 200` — happens in ~200 ms,
-end-to-end, with no accounts, no API keys, no checkout.
+LUMEN is a Lightning-paywalled marketplace that AI agents can buy from
+autonomously. A buyer agent (`tripplanner-7`) needs a hotel listing
+verified, and then needs an audit receipt for the order it just placed.
+The provider (`vision-oracle-3`) sells **two services on one wallet**:
+
+- **`listing-verify`** — OSM-geocoded ground truth, **240 sat** (~$0.16), ~1.1 s
+- **`order-receipt`** — HMAC-signed delivery receipt, **120 sat** (~$0.08), ~350 ms
+
+Plus a free **`/api/v1/discovery`** endpoint that publishes the catalogue
+in a format crawlable by directories like
+[402index.io](https://402index.io). The whole round-trip — `402 → invoice
+→ pay → replay → 200` — happens in ~200 ms per call, end-to-end, with no
+accounts, no API keys, no checkout.
 
 ```
 buyer  ──POST /v1/listing-verify──►  provider
@@ -39,12 +47,17 @@ zero sats moved. Use this to verify everything works before touching a wallet.
 ```bash
 # from the repo root
 npm run install:all
+
+# single-service flow:
 npm run demo
+
+# multi-service flow (verify → receipt, two services on one wallet):
+npm run demo:multi
 ```
 
-You should see the provider start, the buyer run once, six steps print out, and
-the verification proof come back. The provider stays up at <http://localhost:3000>
-afterwards — visit it in a browser to see the dashboard.
+You should see the provider start, the buyer run once, the steps print out, and
+the verification proof + signed receipt come back. The provider stays up at
+<http://localhost:3000> afterwards — visit it in a browser to see the dashboard.
 
 ---
 
@@ -136,11 +149,13 @@ Same interface either way, so the rest of the code never branches on mode.
 
 ## Endpoints
 
-| method | path                       | purpose                                |
-|--------|----------------------------|----------------------------------------|
-| GET    | `/api/health`              | Service info + current wallet mode.    |
-| POST   | `/api/v1/listing-verify`   | The paid endpoint (402 → 200).         |
-| POST   | `/api/dev/pay`             | **MOCK ONLY** — hands back a preimage. |
+| method | path                       | purpose                                       | price    |
+|--------|----------------------------|-----------------------------------------------|----------|
+| GET    | `/api/health`              | Service info + current wallet mode.           | free     |
+| GET    | `/api/v1/discovery`        | Catalogue of paid services (directory-ready). | free     |
+| POST   | `/api/v1/listing-verify`   | OSM-geocoded listing verification.            | 240 sat  |
+| POST   | `/api/v1/order-receipt`    | Signed delivery receipt for a paid order.     | 120 sat  |
+| POST   | `/api/dev/pay`             | **MOCK ONLY** — hands back a preimage.        | n/a      |
 
 All requests / responses are JSON.
 
@@ -151,10 +166,25 @@ All requests / responses are JSON.
 | Brief tool        | What it does in LUMEN                                        |
 |-------------------|--------------------------------------------------------------|
 | **L402**          | The paywall handshake. Implemented in `provider/src/lib/l402.ts`. |
-| **MoneyDevKit**   | Skipped — MDK is checkout-component focused, not L402-server. We do L402 directly. |
+| **MoneyDevKit**   | See note below.                                              |
 | **Alby**          | Both wallets. Single `@getalby/sdk` dependency on each side. |
 | **Lexe**          | Drop-in replacement for the Alby provider wallet (set `NWC_URL` to a Lexe NWC string instead). |
 | **Spark**         | Reserved for the v2 escrow layer — not in M1–M3 scope.       |
+
+### Why the LUMEN provider doesn't import MDK
+
+The brief markets MoneyDevKit as the canonical way to "add Lightning
+payments to any API." In practice the runtime package
+`@moneydevkit/nextjs` ships **checkout components** — React + Radix UI +
+React Hook Form + QR codes — for selling things to humans through a UI,
+not server-side L402 paywalls for selling to agents.
+
+We needed an L402 *server*, so we wrote one — ~80 lines of HMAC-signed
+macaroons + preimage verification (`provider/src/lib/l402.ts`). The
+upside is a self-contained dependency-light demo with auditable surface
+area; the only Lightning library on either end is `@getalby/sdk` (NWC).
+
+If MDK ships an L402-server package later, this is a one-file swap.
 
 ## Mapping to the rubric
 
