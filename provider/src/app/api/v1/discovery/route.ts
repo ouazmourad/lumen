@@ -90,6 +90,10 @@ export async function GET(req: Request) {
         },
       },
     ],
+    extras: {
+      receipt_fetch: { method: "GET", endpoint: `${base}/api/v1/receipts/{receipt_id}`, paid: false },
+      stats:         { method: "GET", endpoint: `${base}/api/v1/stats`, paid: false, auth: "basic" },
+    },
     contact: { email: "agents@lumen.market", license: "MIT" },
     docs: `${base}`,
     healthcheck: `${base}/api/health`,

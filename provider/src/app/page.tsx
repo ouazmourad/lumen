@@ -4,7 +4,8 @@
 export const dynamic = "force-dynamic";
 
 export default function Home() {
-  const mode = process.env.MOCK_MODE === "true" ? "MOCK" : "REAL · NWC";
+  const isMock = process.env.MOCK_MODE === "true";
+  const mode = isMock ? "MOCK" : "MAINNET ⚡";
   const price = process.env.PRICE_SATS ?? "240";
   const ttl = process.env.INVOICE_TTL_SECONDS ?? "300";
 
@@ -19,8 +20,19 @@ export default function Home() {
     }}>
       <div style={{ maxWidth: 920, width: "100%" }}>
         <header style={{ borderBottom: "1px solid #2d2a25", paddingBottom: 24, marginBottom: 32 }}>
-          <div style={{ fontSize: 11, letterSpacing: ".22em", color: "#807968", textTransform: "uppercase" }}>
-            LUMEN · provider · vision-oracle-3
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+            <div style={{ fontSize: 11, letterSpacing: ".22em", color: "#807968", textTransform: "uppercase" }}>
+              LUMEN · provider · vision-oracle-3
+            </div>
+            <div style={{
+              fontSize: 11, letterSpacing: ".18em", padding: "5px 11px",
+              border: `1px solid ${isMock ? "#807968" : "#84e4a1"}`,
+              color: isMock ? "#c9c2ad" : "#84e4a1",
+              background: isMock ? "transparent" : "rgba(132,228,161,.06)",
+              fontWeight: 600,
+            }}>
+              {isMock ? "● MOCK · NO SATS" : "● MAINNET · LIVE"}
+            </div>
           </div>
           <h1 style={{
             fontFamily: "ui-serif, Georgia, serif",
@@ -29,7 +41,7 @@ export default function Home() {
             <span style={{ color: "#ff9f1c" }}>402</span> Payment Required.
           </h1>
           <p style={{ marginTop: 16, color: "#c9c2ad", maxWidth: 600, lineHeight: 1.6 }}>
-            This service sells on-demand listing verification for Lightning sats. Hit the endpoint without
+            This service sells on-demand listing verification and signed receipts for Lightning sats. Hit any paid endpoint without
             an <code style={{ color: "#5cf3ff" }}>Authorization</code> header to get an invoice.
           </p>
         </header>
@@ -70,31 +82,40 @@ export default function Home() {
         </section>
 
         <section style={{ border: "1px solid #2d2a25", padding: 24, marginBottom: 24, background: "#13110e" }}>
-          <div style={{ fontSize: 11, letterSpacing: ".18em", color: "#ff9f1c", marginBottom: 12 }}>TRY IT — POWERSHELL</div>
+          <div style={{ fontSize: 11, letterSpacing: ".18em", color: "#ff9f1c", marginBottom: 12 }}>
+            TRY IT — {isMock ? "CURL (mock; no wallet needed)" : "REAL LIGHTNING (240 sat will leave your wallet)"}
+          </div>
           <pre style={{ margin: 0, color: "#c9c2ad", fontSize: 13, lineHeight: 1.7, overflowX: "auto" }}>
-{`# 1) Ask for the resource. You'll get 402 + an invoice.
-$resp = curl.exe -i -X POST http://localhost:3000/api/v1/listing-verify \\
+{isMock
+? `# 1) Ask for the resource — you'll get 402 + a (fake) invoice.
+curl -sS -i -X POST http://localhost:3000/api/v1/listing-verify \\
   -H "Content-Type: application/json" \\
-  -d '{"listing":"hotel-larix-meribel","date":"2026-03-14"}'
-$resp
+  -d '{"listing":"Eiffel Tower Paris","date":"2026-03-14"}'
 
-# 2) In MOCK mode, "pay" by handing the script the preimage
-#    via the dev helper at /api/dev/pay.  In REAL mode, your wallet
-#    pays the bolt-11 invoice itself.
+# 2) Mock mode: ask the dev faucet for the preimage.
+curl -sS -X POST http://localhost:3000/api/dev/pay \\
+  -H "Content-Type: application/json" \\
+  -d '{"payment_hash":"<from-step-1>"}'
 
-# 3) Replay with the L402 header to receive the verification.`}
+# 3) Replay with the L402 header to unlock the result.
+curl -sS -X POST http://localhost:3000/api/v1/listing-verify \\
+  -H "Authorization: L402 <macaroon>:<preimage>" \\
+  -H "Content-Type: application/json" \\
+  -d '{"listing":"Eiffel Tower Paris","date":"2026-03-14"}'`
+: `# Single service · 240 sat
+cd ../buyer && node agent.js "Eiffel Tower Paris" 2026-03-14
+
+# Multi-service · 240 + 120 sat  (verify, then file an audit receipt)
+cd ../buyer && node agent-multi.js "Eiffel Tower Paris" 2026-03-14
+
+# Public catalogue (free)
+curl -sS http://localhost:3000/api/v1/discovery | jq`}
           </pre>
-        </section>
-
-        <section style={{ border: "1px solid #2d2a25", padding: 24, background: "#13110e" }}>
-          <div style={{ fontSize: 11, letterSpacing: ".18em", color: "#ff9f1c", marginBottom: 12 }}>EASIEST PATH — RUN THE BUYER</div>
-          <pre style={{ margin: 0, color: "#c9c2ad", fontSize: 13, lineHeight: 1.7 }}>
-{`cd ../buyer
-node agent.js`}
-          </pre>
-          <p style={{ color: "#807968", fontSize: 12, marginTop: 14, lineHeight: 1.6 }}>
-            The buyer script handles the 402 → pay → replay round-trip and prints the receipt.
-          </p>
+          {!isMock && (
+            <p style={{ color: "#84e4a1", fontSize: 12, marginTop: 14, lineHeight: 1.6 }}>
+              ⚡ Real Lightning. Each call settles a real invoice via Nostr Wallet Connect. Watch your Alby Hub log for the matching transactions.
+            </p>
+          )}
         </section>
 
         <footer style={{ marginTop: 40, color: "#807968", fontSize: 11, letterSpacing: ".16em", textTransform: "uppercase" }}>

@@ -1,23 +1,23 @@
-// MOCK MODE ONLY.
-//
-// Lets the buyer "pay" an invoice without a wallet by handing back the
-// preimage for a given payment_hash. Disabled when MOCK_MODE != "true".
-//
-// This is the equivalent of running a regtest faucet locally — useful
-// for end-to-end testing before you wire up Alby.
+// MOCK MODE ONLY — local "faucet" that hands the buyer the preimage.
 
 import { mockPreimageFor, wallet } from "@/lib/wallet";
+import { errorResponse } from "@/lib/errors";
+import { trace, finalize } from "@/lib/log";
 
 export async function POST(req: Request) {
+  const ctx = trace(req, "/api/dev/pay");
   if (wallet().kind !== "mock") {
-    return Response.json({ error: "disabled", reason: "MOCK_MODE is off" }, { status: 403 });
+    return finalize(ctx, errorResponse("not_found", "endpoint disabled (MOCK_MODE is off)", 404, ctx.request_id));
   }
   let body: { payment_hash?: string };
-  try { body = await req.json(); } catch { return Response.json({ error: "bad_request" }, { status: 400 }); }
-  if (!body.payment_hash) return Response.json({ error: "bad_request", reason: "payment_hash required" }, { status: 400 });
+  try { body = await req.json(); }
+  catch { return finalize(ctx, errorResponse("bad_request", "invalid JSON", undefined, ctx.request_id)); }
+  if (!body.payment_hash)
+    return finalize(ctx, errorResponse("bad_request", "payment_hash required", undefined, ctx.request_id));
 
   const preimage = mockPreimageFor(body.payment_hash);
-  if (!preimage) return Response.json({ error: "not_found", reason: "no such invoice" }, { status: 404 });
+  if (!preimage)
+    return finalize(ctx, errorResponse("not_found", "no such invoice", undefined, ctx.request_id));
 
-  return Response.json({ paid: true, preimage, note: "MOCK MODE — no actual sats moved" });
+  return finalize(ctx, Response.json({ paid: true, preimage, note: "MOCK MODE — no actual sats moved" }));
 }

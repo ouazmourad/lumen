@@ -1,54 +1,46 @@
-// POST /v1/listing-verify
-//   body: { listing: string, date: string, max_age_h?: number }
-//
-// First call: returns 402 + invoice. Pay it, replay with Authorization: L402 <mac>:<preimage>.
-// Second call: returns the verification proof.
-
-import { require402, verifyAuth } from "@/lib/l402";
+import { require402, verifyAuth, authError } from "@/lib/l402";
+import { errorResponse } from "@/lib/errors";
+import { rateLimit } from "@/lib/ratelimit";
+import { trace, finalize } from "@/lib/log";
 
 const RESOURCE = "/v1/listing-verify";
 
 export async function POST(req: Request) {
+  const ctx = trace(req, RESOURCE);
+
+  const limited = rateLimit(req, ctx.request_id);
+  if (limited) return finalize(ctx, limited);
+
   const auth = req.headers.get("authorization");
   const price = parseInt(process.env.PRICE_SATS ?? "240", 10);
   const ttl = parseInt(process.env.INVOICE_TTL_SECONDS ?? "300", 10);
 
-  // No auth header -> issue a 402 with a fresh invoice.
   if (!auth) {
-    return require402(RESOURCE, price, "lumen.listing-verify", ttl);
+    const r = await require402(RESOURCE, price, "lumen.listing-verify", ttl, ctx.request_id);
+    return finalize(ctx, r);
   }
 
-  // Auth header present -> verify it.
   const result = await verifyAuth(auth, RESOURCE);
-  if (!result.ok) {
-    return Response.json({ error: "unauthorized", reason: result.reason }, { status: 401 });
-  }
+  if (!result.ok) return finalize(ctx, authError(result, ctx.request_id));
 
-  // Parse the request body.
   let body: { listing?: string; date?: string; max_age_h?: number };
-  try {
-    body = await req.json();
-  } catch {
-    return Response.json({ error: "bad_request", reason: "invalid JSON body" }, { status: 400 });
-  }
-  if (!body.listing || !body.date) {
-    return Response.json({ error: "bad_request", reason: "listing and date are required" }, { status: 400 });
-  }
+  try { body = await req.json(); }
+  catch { return finalize(ctx, errorResponse("bad_request", "invalid JSON body", undefined, ctx.request_id), 0); }
+  if (!body.listing || !body.date)
+    return finalize(ctx, errorResponse("bad_request", "listing and date are required", undefined, ctx.request_id), 0);
 
-  // ─── the actual work ──────────────────────────────────────────────
-  // Real geocode via OpenStreetMap Nominatim, falls back to synthetic
-  // if the listing isn't found. In production this would also fetch a
-  // fresh photo and run perceptual-hash diff against the listing.
   const proof = await verifyListing(body.listing, body.date, body.max_age_h ?? 24);
 
-  return Response.json(proof, {
+  const res = Response.json(proof, {
     headers: {
       "x-lumen-paid-sats": String(result.body.amount),
       "x-lumen-preimage": result.preimage.slice(0, 8) + "...",
     },
   });
+  return finalize(ctx, res, result.body.amount);
 }
 
+// ─── verification work ────────────────────────────────────────────────
 async function verifyListing(listing: string, date: string, max_age_h: number) {
   const seed = hashSeed(`${listing}|${date}`);
   const geo = await geocode(listing);
@@ -73,8 +65,6 @@ async function verifyListing(listing: string, date: string, max_age_h: number) {
 }
 
 async function geocode(query: string): Promise<{ lat: number; lon: number; display_name: string; osm_id: number } | null> {
-  // Nominatim usage policy: 1 req/s, custom UA required.
-  // For a hackathon demo this is fine; for production cache aggressively.
   try {
     const url = new URL("https://nominatim.openstreetmap.org/search");
     url.searchParams.set("q", query.replace(/-/g, " "));
@@ -95,19 +85,12 @@ async function geocode(query: string): Promise<{ lat: number; lon: number; displ
 
 function hashSeed(s: string): number {
   let h = 2166136261;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
   return h >>> 0;
 }
 
 function hex32(seed: number): string {
-  let out = "";
-  let x = seed;
-  for (let i = 0; i < 32; i++) {
-    x = Math.imul(x ^ (x >>> 13), 1597334677) >>> 0;
-    out += (x & 0xff).toString(16).padStart(2, "0");
-  }
+  let out = ""; let x = seed;
+  for (let i = 0; i < 32; i++) { x = Math.imul(x ^ (x >>> 13), 1597334677) >>> 0; out += (x & 0xff).toString(16).padStart(2, "0"); }
   return out;
 }
