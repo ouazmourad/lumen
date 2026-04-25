@@ -35,7 +35,9 @@ Two endpoints, ~250 lines of code, the L402 protocol from the brief.
 | `concept.html`      | Editorial concept page (open in any browser).                 |
 | `provider/`         | Next.js 16 service that sells `listing-verify` over L402.     |
 | `buyer/`            | Node script — the AI agent that auto-pays the paywall.        |
-| `demo.js`           | One-command launcher for both.                                |
+| `mcp/`              | **PayMyAgent** — MCP server so Claude Desktop / Cursor can hire LUMEN providers per task. See [`PAYMYAGENT.md`](PAYMYAGENT.md). |
+| `scripts/`          | `preflight.js`, `test-phase1.js`, `test-mcp.js`               |
+| `demo.js`           | One-command launcher for provider + buyer.                    |
 
 ---
 
@@ -203,6 +205,17 @@ If MDK ships an L402-server package later, this is a one-file swap.
 - **`NWC_URL not set`** — you flipped `MOCK_MODE=false` without pasting NWC strings into both env files.
 - **Real-mode payment hangs** — Alby Hub needs an inbound channel to receive. The first incoming payment auto-opens one, which can take ~10s on first run.
 - **Port 3000 in use** — set `PORT=3001 npm run provider` and `PROVIDER_URL=http://localhost:3001` in `buyer/.env`.
+
+---
+
+## Want Claude to drive it?
+
+[`PAYMYAGENT.md`](PAYMYAGENT.md) walks you through wiring the LUMEN MCP
+server into Claude Desktop. Five minutes; gives Claude six tools, three
+spending guardrails (per-call cap, per-session budget, persisted spend
+counter), and the ability to hire LUMEN providers per task on real
+Lightning. End-to-end verifiable via `npm run test:mcp` (12 checks, no
+Claude install required).
 
 ---
 

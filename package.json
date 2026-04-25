@@ -12,6 +12,8 @@
     "demo": "node demo.js",
     "demo:multi": "node demo.js multi",
     "preflight": "node scripts/preflight.js",
-    "test:phase1": "node scripts/test-phase1.js"
+    "test:phase1": "node scripts/test-phase1.js",
+    "test:mcp":    "node scripts/test-mcp.js",
+    "mcp":         "node mcp/server.js"
   }
 }

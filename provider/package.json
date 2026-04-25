@@ -8,6 +8,7 @@
     "start": "next start"
   },
   "dependencies": {
+    "@asteasolutions/zod-to-openapi": "^8.5.0",
     "@getalby/lightning-tools": "^8.1.0",
     "@getalby/sdk": "^7.0.0",
     "better-sqlite3": "^12.9.0",
@@ -24,6 +25,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.5"
   }
 }
